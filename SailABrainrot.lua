@@ -2,7 +2,7 @@ local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main
 local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
 local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
 local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
-local webhookUrl = "YOUR_DISCORD_WEBHOOK_URL_HERE"
+local webhookUrl = "https://discord.com/api/webhooks/1481919661078614079/R8u3KHbGCPOGXSy8wfF-8hO5Y3swDCsu1ivC2BJcachu-r3uhFzvS5pMt1d6nFbbOtwy"
 local stats = game:GetService("Players").LocalPlayer.leaderstats
 local cash = stats and stats:FindFirstChild("\240\159\146\181 Cash") and stats["\240\159\146\181 Cash"].Value or 0
 
