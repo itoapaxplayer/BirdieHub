@@ -313,23 +313,57 @@ UnloadBox:AddButton('Unload / Destroy GUI', function()
 end)
 
 -- ========================================== --
--- ⬇️ BOTTOM: THE ENGINE (KEEP THIS AT THE VERY END) ⬇️
+-- ⬇️ BOTTOM: THE ENGINE (THE ULTIMATE FIX)
 -- ========================================== --
-Library:SetWatermarkVisibility(false)
-Library:SetWatermark('Birdie Hub') 
 
-Library.KeybindFrame.Visible = false
-
+-- 1. Essential Managers
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 
+-- 2. Build the Config Section
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({'MenuKeybind'})
-
+SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
 ThemeManager:SetFolder('BirdieHub')
 SaveManager:SetFolder('BirdieHub/configs')
 
 SaveManager:BuildConfigSection(Tabs['UI Settings'])
 ThemeManager:ApplyToTab(Tabs['UI Settings'])
 
-ThemeManager:SetTheme('Jester')
+-- 3. Visuals & Keybinds
+Library:SetWatermarkVisibility(false)
+Library.KeybindFrame.Visible = false
+
+-- Change the keybind to Right Control so Right Shift isn't the only way
+task.spawn(function()
+    task.wait(0.5)
+    if Options.MenuKeybind then
+        Options.MenuKeybind:SetValue(Enum.KeyCode.RightControl)
+    end
+    ThemeManager:ApplyTheme('Jester')
+end)
+
+-- ========================================== --
+-- 🚀 THE "CURSOR JAILBREAK" LOGIC
+-- ========================================== --
+local UIS = game:GetService("UserInputService")
+
+-- This forces the cursor to stay visible even if the UI tries to hide it
+UIS.InputBegan:Connect(function(input, processed)
+    if input.KeyCode == Enum.KeyCode.RightShift or input.KeyCode == Enum.KeyCode.RightControl then
+        task.wait(0.1) -- Wait for the menu to finish toggling
+        UIS.MouseIconEnabled = true
+        UIS.MouseBehavior = Enum.MouseBehavior.Default
+    end
+end)
+
+-- A secondary loop to ensure the cursor NEVER stays hidden
+task.spawn(function()
+    while true do
+        if Library.MainThreadGroup.Visible then
+            UIS.MouseIconEnabled = true
+        end
+        task.wait(0.5)
+    end
+end)
+
+print("✅ Birdie Hub loaded. Right Shift/Control toggles, Cursor forced ON!")
