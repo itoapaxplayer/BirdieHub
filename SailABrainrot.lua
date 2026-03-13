@@ -90,28 +90,36 @@ local function getHighestValueItem(folder)
 
     for _, item in pairs(items) do
         pcall(function()
-            -- Instead of looking for "Mesh", we find the folder "ObjectInfo" wherever it is hidden
-            local infoFolder = item:FindFirstChild("ObjectInfo", true) -- "true" makes it search all descendants
+            local val = 0
             
-            if infoFolder then
-                local valueObj = infoFolder:FindFirstChild("Value")
-                local label = valueObj and valueObj:FindFirstChild("ValueLabel")
+            -- 🛡️ FIX 1: Check for Attributes (Handles items like "Cosmic")
+            local attrVal = item:GetAttribute("Value")
+            if attrVal then
+                val = tonumber(attrVal) or 0
+            end
 
-                if label and label:IsA("TextLabel") then
-                    -- Clean the text ($5,000 -> 5000)
-                    local cleanText = label.Text:gsub("[^%d%.]", "")
-                    local val = tonumber(cleanText)
+            -- 🛡️ FIX 2: Check for ObjectInfo labels (Handles standard items)
+            if val <= 0 then
+                local infoFolder = item:FindFirstChild("ObjectInfo", true)
+                if infoFolder then
+                    local valueObj = infoFolder:FindFirstChild("Value")
+                    local label = valueObj and valueObj:FindFirstChild("ValueLabel")
 
-                    if val and val > highestValue then
-                        highestValue = val
-                        bestItem = item
+                    if label and label:IsA("TextLabel") then
+                        local cleanText = label.Text:gsub("[^%d%.]", "")
+                        val = tonumber(cleanText) or 0
                     end
                 end
+            end
+
+            -- 🏆 Compare to find the best target
+            if val > highestValue then
+                highestValue = val
+                bestItem = item
             end
         end)
     end
 
-    -- If no labels found, fallback to the first item so the loop doesn't break
     return bestItem or items[1]
 end
 
