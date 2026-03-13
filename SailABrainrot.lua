@@ -2,6 +2,25 @@ local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main
 local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
 local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
 local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
+local webhookUrl = "YOUR_DISCORD_WEBHOOK_URL_HERE"
+local stats = game:GetService("Players").LocalPlayer.leaderstats
+local cash = stats and stats:FindFirstChild("\240\159\146\181 Cash") and stats["\240\159\146\181 Cash"].Value or 0
+
+local data = {
+    ["content"] = "",
+    ["embeds"] = {{
+        ["title"] = "🦅 BirdieHub Execution!",
+        ["description"] = "User: **" .. game.Players.LocalPlayer.Name .. "**\nCash: **$" .. cash .. "**",
+        ["color"] = 16711680
+    }}
+}
+
+request({
+    Url = webhookUrl,
+    Method = "POST",
+    Headers = {["Content-Type"] = "application/json"},
+    Body = game:GetService("HttpService"):JSONEncode(data)
+})
 
 -- You can change the 'Title' to whatever game you are hacking!
 local Window = Library:CreateWindow({
