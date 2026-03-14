@@ -39,11 +39,18 @@ local LocalPlayer = Players.LocalPlayer
 -- ========================================== --
 -- 🏃 ANTI-AFK SYSTEM
 -- ========================================== --
-local VirtualUser = game:GetService("VirtualUser")
-LocalPlayer.Idled:Connect(function()
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton2(Vector2.new())
-    print("🛡️ Anti-AFK: Prevented kick!")
+task.spawn(function()
+    local VirtualUser = game:GetService("VirtualUser")
+    
+    while true do
+        -- Simulates a small mouse click on the game window
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new(0,0))
+        
+        print("🛡️ Anti-AFK: Clicked to prevent idle kick!") -- Moved inside the loop!
+        
+        task.wait(5) 
+    end
 end)
 
 -- ========================================== --
@@ -199,10 +206,10 @@ FarmBox:AddToggle('AutoSell', {
 local BuyBox = Tabs.Main:AddRightGroupbox('Auto Egg Shop')
 
 local EggPrices = {
-    ["Bloop"] = 99999999, ["Squid"] = 99999999, ["Megalodon"] = 99999999, 
-    ["Manatee"] = 99999999, ["SeaTurtle"] = 750000, ["HammerheadShark"] = 500000, 
+    ["Bloop"] = 1500000, ["Squid"] = 1000000, ["Megalodon"] = 1000000, 
+    ["Manatee"] = 850000, ["SeaTurtle"] = 750000, ["HammerheadShark"] = 500000, 
     ["BlobFish"] = 150000, ["Lionfish"] = 120000, ["AngelSquid"] = 110000, 
-    ["Swordfish"] = 99999999, ["Koi"] = 50000, ["Clownfish"] = 15000, 
+    ["Swordfish"] = 100000, ["Koi"] = 50000, ["Clownfish"] = 15000, 
     ["BlueTang"] = 12000, ["Goldfish"] = 6000, ["Shrimp"] = 5100, 
     ["Salmon"] = 3250, ["Stubby"] = 1200, ["Catfish"] = 1000, 
     ["Bass"] = 400, ["Tilapia"] = 120, ["Eel"] = 200, 
@@ -268,6 +275,72 @@ BuyBox:AddToggle('AutoBuy', {
 })
 
 -- ========================================== --
+-- 🎣 AUTO BUY ROD SECTION
+-- ========================================== --
+local RodBox = Tabs.Main:AddRightGroupbox('Auto Rod Shop')
+
+local RodPrices = {
+    ["CoralithRod"] = 999999,
+    ["AdvancedRod"] = 650000,
+    ["BasicRod"] = 500000,
+    ["StickRod"] = 250000
+}
+
+RodBox:AddDropdown('RodTarget', {
+    Values = { 'StickRod', 'BasicRod', 'AdvancedRod', 'CoralithRod' },
+    Default = 1,
+    Multi = true, -- Changed to true!
+    Text = 'Select Rods to Buy',
+})
+
+RodBox:AddToggle('AutoBuyRod', {
+    Text = 'Enable Auto-Buy Rod',
+    Default = false,
+    Callback = function(Value)
+        _G.AutoBuyRod = Value
+        if Value then
+            task.spawn(function()
+                while _G.AutoBuyRod do
+                    local success, err = pcall(function()
+                        local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+                        local bubloons = leaderstats and leaderstats:FindFirstChild("Bubloons")
+                        
+                        if bubloons then
+                            local currentMoney = bubloons.Value
+                            local selectedRods = Options.RodTarget.Value -- This is now a table of true/false values
+                            
+                            -- Loop through the table of rods you checked
+                            for rodName, isSelected in pairs(selectedRods) do
+                                if isSelected and _G.AutoBuyRod then
+                                    local price = RodPrices[rodName]
+                                    
+                                    if price and currentMoney >= price then
+                                        local buyArgs = {
+                                            [1] = {
+                                                [1] = { [1] = "Rod", [2] = rodName },
+                                                [2] = ")"
+                                            }
+                                        }
+                                        game:GetService("ReplicatedStorage")["ffrostflame_bridgenet2@1.0.0"].dataRemoteEvent:FireServer(unpack(buyArgs))
+                                        
+                                        print("🎣 Bought Rod: " .. rodName)
+                                        currentMoney = currentMoney - price -- Local math to prevent trying to buy 2 expensive rods at once
+                                        task.wait(0.5) -- Small delay between buys
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                    
+                    if not success then warn("Auto Buy Rod Error: " .. tostring(err)) end
+                    task.wait(1.5) -- Check wallet every 1.5 seconds
+                end
+            end)
+        end
+    end
+})
+
+-- ========================================== --
 -- 🛑 KILL SWITCH / UNLOAD
 -- ========================================== --
 local UnloadBox = Tabs['UI Settings']:AddLeftGroupbox('Hub Management')
@@ -275,6 +348,9 @@ local UnloadBox = Tabs['UI Settings']:AddLeftGroupbox('Hub Management')
 Library.OnUnload = function()
     print("Shutting down Birdie Hub...")
     _G.AutoHarvest = false
+    _G.AutoSell = false
+    _G.AutoBuy = false
+    _G.AutoBuyRod = false
     print("Birdie Hub successfully wiped from memory. Safe to re-inject!")
 end
 
