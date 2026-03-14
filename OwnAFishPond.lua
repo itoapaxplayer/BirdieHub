@@ -37,6 +37,16 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 -- ========================================== --
+-- 🏃 ANTI-AFK SYSTEM
+-- ========================================== --
+local VirtualUser = game:GetService("VirtualUser")
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+    print("🛡️ Anti-AFK: Prevented kick!")
+end)
+
+-- ========================================== --
 -- 🌾 AUTO HARVEST SECTION
 -- ========================================== --
 local FarmBox = Tabs.Main:AddLeftGroupbox('Auto Harvest')
