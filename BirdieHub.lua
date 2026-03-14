@@ -3,7 +3,7 @@
 local Games = {
     -- [PlaceID] = "Raw GitHub Link"
     [89046742932569] = "https://raw.githubusercontent.com/itoapaxplayer/BirdieHub/refs/heads/main/SailABrainrot.lua?token=GHSAT0AAAAAADXWNVHGTBH6DGCK3VLKGARQ2NUMJTQ",
-    [130223052405478] = "https://raw.githubusercontent.com/itoapaxplayer/BirdieHub/refs/heads/main/OwnAFishPond.lua?token=GHSAT0AAAAAADXWNVHG4TAAIIANTG7P2HAK2NVOH2Q",
+    [130223052405478] = "https://raw.githubusercontent.com/itoapaxplayer/BirdieHub/refs/heads/main/OwnAFishPond.lua?token=GHSAT0AAAAAADXWNVHHQ5UVZQA3JVSWWWHO2NVXK4A",
 }
 
 local scriptUrl = Games[game.PlaceId]
