@@ -32,6 +32,7 @@ local Window = Library:CreateWindow({
 -- 🛠️ FIX 1: Added the 'Server Info' Tab here so it doesn't crash!
 local Tabs = {
     Main = Window:AddTab('Main Tab'),
+    -- Stock = Window:AddTab('Stock'),
     ['Server Info'] = Window:AddTab('Server Info'), 
     ['UI Settings'] = Window:AddTab('UI Settings'),
 }
@@ -40,22 +41,31 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 -- ========================================== --
--- 🏃 ANTI-AFK SYSTEM
+-- 🛑 GOD MODE: ANTI-AFK & ANTI-TELEPORT
 -- ========================================== --
-_G.AntiAfkEnabled = true 
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
 
-task.spawn(function()
-    local VirtualUser = game:GetService("VirtualUser")
-    print("🛡️ Anti-AFK Started!")
+-- 1. Defeat Roblox's Native 20-Minute Kick
+Players.LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+    print("🛡️ Anti-AFK triggered! Prevented native Roblox kick.")
+end)
+
+-- 2. Defeat the Developer's Forced Rejoin
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
     
-    while _G.AntiAfkEnabled do
-        local success, err = pcall(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new(0,0))
-        end)
-        task.wait(5) 
+    -- If the game tries to use ANY teleportation magic on us, block it
+    if self == TeleportService and string.find(method, "Teleport") then
+        print("🚫 BLOCKED A FORCED REJOIN/TELEPORT ATTEMPT!")
+        return -- Returning nothing cancels the teleport completely
     end
-    print("🛑 Anti-AFK successfully shut down!")
+    
+    return oldNamecall(self, ...)
 end)
 
 -- ========================================== --
@@ -398,7 +408,7 @@ local function ToggleChair(state)
     end
 end
 -- ========================================== --
--- 🎣 SMART ROD FINDER (Now uses RodId & Forces Coralith for Event)
+-- 🎣 SMART ROD FINDER (Tie-Breaker Fixed)
 -- ========================================== --
 local function getBestRod()
     local char = player.Character
@@ -406,11 +416,11 @@ local function getBestRod()
     local charTools = char and char:GetChildren() or {}
     local allRods = {}
 
-    -- Gather all tools that have a "RodId" attribute
-    for _, item in ipairs(backpack) do 
+    -- 🛠️ FIX 1: Load Character Tools FIRST so they get priority in the list
+    for _, item in ipairs(charTools) do 
         if item:IsA("Tool") and item:GetAttribute("RodId") then table.insert(allRods, item) end 
     end
-    for _, item in ipairs(charTools) do 
+    for _, item in ipairs(backpack) do 
         if item:IsA("Tool") and item:GetAttribute("RodId") then table.insert(allRods, item) end 
     end
 
@@ -422,10 +432,15 @@ local function getBestRod()
                 if not bestCoralith then 
                     bestCoralith = rod
                 else
-                    -- Pick the one with lower health to use it up
                     local curHealth = rod:GetAttribute("Health") or 100
                     local bHealth = bestCoralith:GetAttribute("Health") or 100
-                    if curHealth < bHealth then bestCoralith = rod end
+                    
+                    -- 🛠️ FIX 2: Tie-breaker! If health is tied, keep holding the current rod
+                    if curHealth < bHealth then 
+                        bestCoralith = rod 
+                    elseif curHealth == bHealth and rod.Parent == char then
+                        bestCoralith = rod
+                    end
                 end
             end
         end
@@ -451,7 +466,13 @@ local function getBestRod()
                 elseif id == bestId then
                     local curHealth = rod:GetAttribute("Health") or 100
                     local bHealth = bestRod:GetAttribute("Health") or 100
-                    if curHealth < bHealth then bestRod = rod end
+                    
+                    -- 🛠️ FIX 2: Tie-breaker for normal logic
+                    if curHealth < bHealth then 
+                        bestRod = rod 
+                    elseif curHealth == bHealth and rod.Parent == char then
+                        bestRod = rod
+                    end
                 end
             end
         end
@@ -468,6 +489,14 @@ end
 -- ========================================== --
 -- 🎣 MAIN CONTROLLER
 -- ========================================== --
+
+-- 📖 THE HITBOX DICTIONARY (Replace these IDs with yours!)
+local HitboxDictionary = {
+    ["rbxassetid://110303522374749"]   = 13,
+    ["rbxassetid://93848904723096"] = 8,
+    ["rbxassetid://119251110079591"]   = 3,
+}
+
 local FishBox = Tabs.Main:AddLeftGroupbox('Auto Fishing')
 
 FishBox:AddDropdown('RodSelection', { 
@@ -480,6 +509,13 @@ FishBox:AddDropdown('ActiveEventSelection', { Text = 'Allowed Events', Default =
 FishBox:AddToggle('EventOnly', { Text = 'Only Fish During Selected Events', Default = false })
 FishBox:AddToggle('AutoChair', { Text = 'Auto-Sit at Rest Spot', Default = false })
 
+-- 🛡️ THE NEW SAFE MODE TOGGLE
+FishBox:AddToggle('SafeMode', { 
+    Text = 'Safe Mode (Unknown Fish = Hard)', 
+    Default = true,
+    Tooltip = 'If we hook an image ID not in your dictionary, use a tiny radius so we never miss.'
+})
+
 FishBox:AddToggle('AutoFish', {
     Text = 'Full AFK Auto-Fish',
     Default = false,
@@ -489,7 +525,10 @@ FishBox:AddToggle('AutoFish', {
             -- HIGH-SPEED MINI-GAME LOOP
             task.spawn(function()
                 local RunService = game:GetService("RunService")
+                local lastClickTime = 0 
+                local COOLDOWN_TIME = 0.6 -- Stops double clicks!
                 local catchConn
+                
                 catchConn = RunService.RenderStepped:Connect(function()
                     if not _G.AutoFishing then catchConn:Disconnect() return end
                     
@@ -506,20 +545,39 @@ FishBox:AddToggle('AutoFish', {
                         local arrow = main and main:FindFirstChild("Arrow")
                         local uiScaleObj = holder:FindFirstChildOfClass("UIScale")
 
-                        if target and arrow then
+                        if target and arrow and target:IsA("ImageLabel") then
                             local aRot = arrow.Rotation % 360
                             local tRot = target.Rotation % 360
                             local currentScale = uiScaleObj and uiScaleObj.Scale or 1
-                            if math.abs(aRot - tRot) < (12 * currentScale) then
-                                simulateClick()
-                                task.wait(0.5)
+                            
+                            -- 🧠 DICTIONARY LOGIC
+                            local currentImage = target.Image
+                            local baseRadius = 13 -- Absolute fallback
+                            
+                            if HitboxDictionary[currentImage] then
+                                baseRadius = HitboxDictionary[currentImage]
+                            elseif Toggles.SafeMode.Value then
+                                baseRadius = 3 -- Unrecognized ID, play it safe!
+                            end
+                            
+                            -- Math: Distance between arrow and target
+                            local distance = math.abs(aRot - tRot)
+                            -- 🔧 Fix: 360-degree Wrap Around (e.g., 359 vs 1 is actually a distance of 2, not 358)
+                            if distance > 180 then distance = 360 - distance end
+                            
+                            if distance <= (baseRadius * currentScale) then
+                                -- 🛑 ANTI-DOUBLE CLICK
+                                if tick() - lastClickTime > COOLDOWN_TIME then
+                                    lastClickTime = tick()
+                                    simulateClick()
+                                end
                             end
                         end
                     end
                 end)
             end)
 
-            -- MANAGER LOOP
+            -- MANAGER LOOP (Your resting/equipping logic stays exactly the same!)
             task.spawn(function()
                 while _G.AutoFishing do
                     local char = player.Character
@@ -572,12 +630,11 @@ FishBox:AddToggle('AutoFish', {
                             local tween = TweenService:Create(hrp, TweenInfo.new(2, Enum.EasingStyle.Quad), {CFrame = CFrame.new(restingPos, restingPos + restingLook)})
                             tween:Play()
                             tween.Completed:Wait() 
-                            task.wait(0.7) -- Small delay to settle character
+                            task.wait(0.7) 
                         end
                         
-                        -- Now checking outside the magnitude check so it sits even if you were already close
                         if Toggles.AutoChair.Value and not isSitting then 
-                            isSitting = false -- Force reset
+                            isSitting = false 
                             ToggleChair("Sit") 
                         end
                     end
@@ -651,6 +708,200 @@ task.spawn(function()
         end
     end
 end)
+
+-- -- ========================================== --
+-- -- 📦 CATEGORIES (Moved up so the UI can use it!)
+-- -- ========================================== --
+-- local Categories = {
+--     ["Eggs"] = { "Sardine", "Anchovy", "Eel", "Bass", "Tilapia", "Catfish", "Stubby", "Salmon", "Shrimp", "Goldfish", "BlueTang", "Clownfish", "Koi", "Swordfish", "AngelSquid", "Lionfish", "Blobfish", "HammerheadShark", "SeaTurtle", "Manatee", "Megalodon", "Squid", "Bloop" },
+--     ["Rods"] = { "StickRod", "BasicRod", "AdvancedRod", "CoralithRod" },
+--     ["Boosters"] = { "Level_1_Ticket", "Level_2_Ticket", "Speed_Boost", "Oxygen_Boost", "Worm", "FishBag", "MassiveFishnet", "FavoriteTool", "MegaWrench", "MegaPellets", "AppraiseTool" }
+-- }
+
+-- -- ========================================== --
+-- -- 📦 STOCK TAB UI SETUP
+-- -- ========================================== --
+-- local EggBox = Tabs.Stock:AddLeftGroupbox('Fish Egg Stock')
+-- local RodBox = Tabs.Stock:AddLeftGroupbox('Fish Rod Stock')
+
+-- local BoostBox = Tabs.Stock:AddRightGroupbox('Boost Stock')
+-- local SecretBox = Tabs.Stock:AddRightGroupbox('Secret Shop Stock')
+
+-- -- 🛠️ THE FIX: Create a separate label for EVERY single item.
+-- -- This forces the boxes to build at their exact maximum size permanently!
+-- local UI_Labels = { Eggs = {}, Rods = {}, Boosters = {} }
+
+-- for _, name in ipairs(Categories["Eggs"]) do
+--     UI_Labels.Eggs[name] = EggBox:AddLabel(name .. ': Waiting...')
+-- end
+
+-- for _, name in ipairs(Categories["Rods"]) do
+--     UI_Labels.Rods[name] = RodBox:AddLabel(name .. ': Waiting...')
+-- end
+
+-- for _, name in ipairs(Categories["Boosters"]) do
+--     UI_Labels.Boosters[name] = BoostBox:AddLabel(name .. ': Waiting...')
+-- end
+
+-- -- 🦀 Secret Shop Box
+-- local SecretLabel = SecretBox:AddLabel('Hermit Status: Waiting...')
+
+-- -- ========================================== --
+-- -- 🎛️ SCANNER CONTROLS (Server Info Tab)
+-- -- ========================================== --
+-- local ScannerBox = Tabs['Server Info']:AddLeftGroupbox('Scanner Controls')
+
+-- ScannerBox:AddToggle('AutoScanStock', {
+--     Text = 'Enable Auto-Stock Scanner',
+--     Default = false,
+--     Tooltip = 'Scans the UI in the background and updates the Stock tab.',
+-- })
+
+-- ScannerBox:AddToggle('SecretShopWatcher', {
+--     Text = 'Notify on Secret Shop Spawn',
+--     Default = false,
+--     Tooltip = 'Watches the Workspace for the Hermit and alerts you!',
+-- })
+
+-- -- ========================================== --
+-- -- ⚙️ STOCK & SECRET SHOP WATCHER LOGIC
+-- -- ========================================== --
+-- local RS = game:GetService("ReplicatedStorage")
+-- local WS = game:GetService("Workspace")
+
+-- if _G.BirdieStockScanner then
+--     _G.BirdieStockScanner = false 
+--     task.wait(0.2) 
+-- end
+-- _G.BirdieStockScanner = true
+
+-- -- 1. Secret Shop Notifier Loop
+-- task.spawn(function()
+--     local isFound = false
+--     while _G.BirdieStockScanner do
+--         if Toggles.SecretShopWatcher and Toggles.SecretShopWatcher.Value then
+--             local npcInWS = WS:FindFirstChild("Hermit", true)
+            
+--             if npcInWS and not isFound then
+--                 SecretLabel:SetText('Hermit Status: 🟢 SPAWNED!')
+--                 print("🚨 ALERT: THE SECRET SHOP HAS SPAWNED!")
+--                 Library:Notify("🚨 THE SECRET SHOP HAS SPAWNED!", 5)
+--                 isFound = true
+--             elseif not npcInWS and isFound then
+--                 SecretLabel:SetText('Hermit Status: 🔴 Despawned')
+--                 isFound = false
+--             elseif not npcInWS then
+--                 SecretLabel:SetText('Hermit Status: 🔴 Waiting...')
+--             end
+--         else
+--             SecretLabel:SetText('Hermit Status: ⏸️ Watcher Paused')
+--         end
+--         task.wait(3)
+--     end
+-- end)
+
+-- 2. UI-Based Scanner Loop (ULTIMATE EDITION)
+task.spawn(function()
+    print("🚀 STARTING ULTIMATE UI SCRAPER...")
+    local player = game.Players.LocalPlayer
+    local playerGui = player:WaitForChild("PlayerGui")
+    
+    local function cleanName(str)
+        return string.lower(string.gsub(str, "[%s_]", ""))
+    end
+    
+    while _G.BirdieStockScanner do
+        if Toggles.AutoScanStock and Toggles.AutoScanStock.Value then
+            
+            for catName, itemGroup in pairs(Categories) do
+                for _, itemName in ipairs(itemGroup) do
+                    local uiLabel = UI_Labels[catName] and UI_Labels[catName][itemName]
+                    
+                    if uiLabel then
+                        local targetNameClean = cleanName(itemName)
+                        local itemFrame = nil
+                        
+                        -- 1. FUZZY SEARCH for the Item's Frame anywhere in PlayerGui
+                        for _, gui in pairs(playerGui:GetDescendants()) do
+                            if gui:IsA("GuiObject") and cleanName(gui.Name) == targetNameClean then
+                                itemFrame = gui
+                                break
+                            end
+                        end
+                        
+                        -- 2. Extract the text
+                        if itemFrame then
+                            local stockFound = false
+                            
+                            for _, child in pairs(itemFrame:GetDescendants()) do
+                                if child:IsA("TextLabel") or child:IsA("TextButton") then
+                                    local lowerName = string.lower(child.Name)
+                                    local text = tostring(child.Text)
+                                    local upperText = string.upper(text)
+                                    
+                                    -- A. Check for explicitly "Sold Out" text
+                                    if string.find(upperText, "NO STOCKS") or string.find(upperText, "SOLD OUT") then
+                                        uiLabel:SetText(itemName .. ": ❌ SOLD OUT")
+                                        stockFound = true
+                                        break
+                                    end
+                                    
+                                    -- B. Check if it's the standard "Stock" label
+                                    if string.find(lowerName, "stock") or string.find(lowerName, "amount") or string.find(lowerName, "count") then
+                                        local cleanNumber = string.match(text, "%d+")
+                                        if cleanNumber then
+                                            local stockNum = tonumber(cleanNumber)
+                                            if stockNum <= 0 then
+                                                uiLabel:SetText(itemName .. ": ❌ SOLD OUT")
+                                            else
+                                                uiLabel:SetText(itemName .. ": ✅ " .. tostring(stockNum))
+                                            end
+                                            stockFound = true
+                                            break
+                                        end
+                                    end
+                                    
+                                    -- C. Fallback for weird labels like "x10 WORMS"
+                                    if string.match(upperText, "X%d+") or string.match(upperText, "%d+ WORMS") or string.match(upperText, "X%d+ STOCKS") then
+                                        local cleanNumber = string.match(text, "%d+")
+                                        if cleanNumber then
+                                            local stockNum = tonumber(cleanNumber)
+                                            if stockNum <= 0 then
+                                                uiLabel:SetText(itemName .. ": ❌ SOLD OUT")
+                                            else
+                                                uiLabel:SetText(itemName .. ": ✅ " .. tostring(stockNum))
+                                            end
+                                            stockFound = true
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                            
+                            if not stockFound then
+                                uiLabel:SetText(itemName .. ": ⚠️ Text Hidden")
+                            end
+                        else
+                            uiLabel:SetText(itemName .. ": 🔍 Open Shop to Sync")
+                        end
+                    end
+                end
+            end
+        else
+            -- Paused State
+            for catName, itemGroup in pairs(Categories) do
+                for _, itemName in ipairs(itemGroup) do
+                    local uiLabel = UI_Labels[catName] and UI_Labels[catName][itemName]
+                    if uiLabel then
+                        uiLabel:SetText(itemName .. ": ⏸️ Paused")
+                    end
+                end
+            end
+        end
+        
+        task.wait(2) 
+    end
+end)
 -- ========================================== --
 -- 🛑 KILL SWITCH / UNLOAD
 -- ========================================== --
@@ -666,6 +917,7 @@ Library.OnUnload = function()
     _G.EventWatcherEnabled = false -- Fixed: Kills the event watcher too!
     _G.AutoBuyBooster = false
     _G.AutoFishing = false
+    _G.BirdieStockScanner = false
     print("Birdie Hub successfully wiped from memory. Safe to re-inject!")
 end
 
@@ -686,6 +938,9 @@ SaveManager:SetFolder('BirdieHub/configs')
 
 SaveManager:BuildConfigSection(Tabs['UI Settings'])
 ThemeManager:ApplyToTab(Tabs['UI Settings'])
+
+-- 🛠️ THE FIX: This forces the script to read your saved configuration on startup!
+SaveManager:LoadAutoloadConfig()
 
 Library:SetWatermarkVisibility(false)
 Library.KeybindFrame.Visible = false
